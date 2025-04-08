@@ -8,7 +8,7 @@
     smtp_port: 587
     smtp_username: atibnccat@gmail.com
     # Store this securely in Ansible Vault 
-    smtp_password: Ts5n1m3.
+    smtp_password: Asecurepassword
     recipient_email: atiadmin@bnc.cat
     
     # EOL dates for various distributions
