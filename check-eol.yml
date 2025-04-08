@@ -1,0 +1,45 @@
+- name: Check if Linux version is EOL
+  hosts: all
+  gather_facts: true
+  vars:
+    eol_dates:
+      # Ubuntu EOL dates
+      "Ubuntu 18.04": "2023-04-30"
+      "Ubuntu 20.04": "2025-04-30"
+      "Ubuntu 22.04": "2027-04-30"
+      # RHEL/CentOS EOL dates
+      "CentOS 7": "2024-06-30"
+      "CentOS 8": "2021-12-31"
+      "RHEL 7": "2024-06-30"
+      "RHEL 8": "2029-05-31"
+      "RHEL 9": "2032-05-31"
+      # Fedora EOL dates
+      "Fedora 35": "2022-12-13"
+      "Fedora 36": "2023-05-16"
+      "Fedora 37": "2023-12-05"
+      "Fedora 38": "2024-05-21"
+      "Fedora 39": "2024-11-12"
+
+  tasks:
+    - name: Get detailed OS version
+      ansible.builtin.set_fact:
+        os_key: "{{ ansible_distribution }} {{ ansible_distribution_major_version }}"
+      
+    - name: Check if distribution is EOL
+      ansible.builtin.set_fact:
+        is_eol: "{{ (eol_dates[os_key] is defined) and (eol_dates[os_key] | to_datetime('%Y-%m-%d') < ansible_date_time.date | to_datetime('%Y-%m-%d')) }}"
+      
+    - name: Display EOL status
+      ansible.builtin.debug:
+        msg: "WARNING: {{ os_key }} reached end-of-life on {{ eol_dates[os_key] }}. Consider upgrading your system."
+      when: is_eol | bool
+      
+    - name: Display supported status
+      ansible.builtin.debug:
+        msg: "{{ os_key }} is still supported until {{ eol_dates[os_key] }}"
+      when: not is_eol | bool and eol_dates[os_key] is defined
+      
+    - name: Display unknown status
+      ansible.builtin.debug:
+        msg: "Unable to determine EOL status for {{ os_key }}"
+      when: eol_dates[os_key] is not defined
