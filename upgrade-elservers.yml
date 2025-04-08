@@ -1,0 +1,42 @@
+---
+- name: Upgrade all Enterpise Linux servers
+  hosts: el_servers
+  become: yes
+  tasks:
+
+    - name: Upgrade Apache package
+      ansible.builtin.yum:
+        name: httpd
+        state: latest
+      register: apache_upgrade_result
+      notify: Fix PHP permissions
+
+    - name: Ensure dnf/yum cache is up to date
+      ansible.builtin.yum:
+        update_cache: yes
+
+    - name: Upgrade all packages
+      ansible.builtin.yum:
+        name: '*'
+        state: latest
+    
+    #- name: Reboot the server if kernel was updated
+    #  ansible.builtin.reboot:
+    #    reboot_timeout: 600 
+  handlers:
+
+    - name: Fix PHP permissions
+      become: yes
+      block:
+        - name: Change owner os sessions folder
+          ansible.builtin.command: chown -R root:nginx /var/lib/php/sessions
+        - name: Change owner os opcache folder
+          ansible.builtin.command: chown -R root:nginx /var/lib/php/opcache
+        - name: Change owner os wsdlcache folder
+          ansible.builtin.command: chown -R root:nginx /var/lib/php/wsdlcache
+      
+      when:
+        - "'nginx_servers' in group_names"
+        - apache_upgrade_result.changed
+
+    
