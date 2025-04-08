@@ -1,7 +1,17 @@
-- name: Check if Linux version is EOL
+---
+- name: Check Linux EOL status and email results
   hosts: all
   gather_facts: true
   vars:
+    # Gmail SMTP settings
+    smtp_host: smtp.gmail.com
+    smtp_port: 587
+    smtp_username: atibnccat@gmail.com
+    # Store this securely in Ansible Vault 
+    smtp_password: Ts5n1m3.
+    recipient_email: atiadmin@bnc.cat
+    
+    # EOL dates for various distributions
     eol_dates:
       # Ubuntu EOL dates
       "Ubuntu 18.04": "2023-04-30"
@@ -13,13 +23,15 @@
       "RHEL 7": "2024-06-30"
       "RHEL 8": "2029-05-31"
       "RHEL 9": "2032-05-31"
+      "AlamLinux 8": "2029-05-31"
+      "AlamLinux 9": "2032-05-31"
       # Fedora EOL dates
       "Fedora 35": "2022-12-13"
       "Fedora 36": "2023-05-16"
       "Fedora 37": "2023-12-05"
       "Fedora 38": "2024-05-21"
       "Fedora 39": "2024-11-12"
-
+  
   tasks:
     - name: Get detailed OS version
       ansible.builtin.set_fact:
@@ -28,18 +40,103 @@
     - name: Check if distribution is EOL
       ansible.builtin.set_fact:
         is_eol: "{{ (eol_dates[os_key] is defined) and (eol_dates[os_key] | to_datetime('%Y-%m-%d') < ansible_date_time.date | to_datetime('%Y-%m-%d')) }}"
+        eol_date: "{{ eol_dates[os_key] | default('Unknown') }}"
+    
+    - name: Prepare email content
+      ansible.builtin.set_fact:
+        email_subject: "OS Status Alert: {{ ansible_hostname }} - {{ 'EOL' if is_eol|bool else 'Supported' }}"
+        email_body: |
+          <html>
+          <body>
+          <h2>System OS Status Report</h2>
+          <p>System: <b>{{ ansible_hostname }}</b> ({{ ansible_default_ipv4.address | default('IP unknown') }})</p>
+          
+          <table border="1" cellpadding="5" style="border-collapse: collapse;">
+            <tr>
+              <th>Detail</th>
+              <th>Value</th>
+            </tr>
+            <tr>
+              <td>Operating System</td>
+              <td>{{ ansible_distribution }} {{ ansible_distribution_version }}</td>
+            </tr>
+            <tr>
+              <td>Kernel</td>
+              <td>{{ ansible_kernel }}</td>
+            </tr>
+            <tr>
+              <td>EOL Date</td>
+              <td>{{ eol_date }}</td>
+            </tr>
+            <tr>
+              <td>Status</td>
+              <td {% if is_eol|bool %}style="color: red; font-weight: bold;"{% endif %}>
+                {{ "END OF LIFE - REQUIRES UPDATE" if is_eol|bool else "Supported" }}
+              </td>
+            </tr>
+            <tr>
+              <td>Check Date</td>
+              <td>{{ ansible_date_time.date }}</td>
+            </tr>
+          </table>
+          
+          {% if is_eol|bool %}
+          <p style="color: red;"><b>Action Required:</b> This system is running an end-of-life operating system and should be upgraded as soon as possible.</p>
+          {% else %}
+          <p style="color: green;">This system is running a supported operating system version.</p>
+          {% endif %}
+          
+          <p><i>This is an automated message from Ansible.</i></p>
+          </body>
+          </html>
+      when: eol_dates[os_key] is defined
       
-    - name: Display EOL status
-      ansible.builtin.debug:
-        msg: "WARNING: {{ os_key }} reached end-of-life on {{ eol_dates[os_key] }}. Consider upgrading your system."
-      when: is_eol | bool
-      
-    - name: Display supported status
-      ansible.builtin.debug:
-        msg: "{{ os_key }} is still supported until {{ eol_dates[os_key] }}"
-      when: not is_eol | bool and eol_dates[os_key] is defined
-      
-    - name: Display unknown status
-      ansible.builtin.debug:
-        msg: "Unable to determine EOL status for {{ os_key }}"
+    - name: Prepare email for unknown OS
+      ansible.builtin.set_fact:
+        email_subject: "OS Status Unknown: {{ ansible_hostname }}"
+        email_body: |
+          <html>
+          <body>
+          <h2>System OS Status Unknown</h2>
+          <p>System: <b>{{ ansible_hostname }}</b> ({{ ansible_default_ipv4.address | default('IP unknown') }})</p>
+          
+          <p>Unable to determine EOL status for: {{ ansible_distribution }} {{ ansible_distribution_version }}</p>
+          
+          <table border="1" cellpadding="5" style="border-collapse: collapse;">
+            <tr>
+              <th>Detail</th>
+              <th>Value</th>
+            </tr>
+            <tr>
+              <td>Operating System</td>
+              <td>{{ ansible_distribution }} {{ ansible_distribution_version }}</td>
+            </tr>
+            <tr>
+              <td>Kernel</td>
+              <td>{{ ansible_kernel }}</td>
+            </tr>
+            <tr>
+              <td>Check Date</td>
+              <td>{{ ansible_date_time.date }}</td>
+            </tr>
+          </table>
+          
+          <p style="color: orange;"><b>Action Recommended:</b> Please verify if this OS version is still supported.</p>
+          
+          <p><i>This is an automated message from Ansible.</i></p>
+          </body>
+          </html>
       when: eol_dates[os_key] is not defined
+    
+    - name: Send email notification
+      ansible.builtin.mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        username: "{{ smtp_username }}"
+        password: "{{ smtp_password }}"
+        to: "{{ recipient_email }}"
+        from: "{{ smtp_username }}"
+        subject: "{{ email_subject }}"
+        body: "{{ email_body }}"
+        subtype: html
+        secure: starttls
