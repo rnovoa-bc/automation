@@ -20,9 +20,9 @@
         name: '*'
         state: latest
     
-    #- name: Reboot the server if kernel was updated
-    #  ansible.builtin.reboot:
-    #    reboot_timeout: 600 
+    - name: Reboot the server if kernel was updated
+      ansible.builtin.reboot:
+        reboot_timeout: 600 
   handlers:
 
     - name: Fix PHP permissions
